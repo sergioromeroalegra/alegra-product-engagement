@@ -1,6 +1,8 @@
 SELECT
 app_version AS country
 ,id_company
+--,CAST(DATE_TRUNC('year', TO_DATE(CAST(id_date_registration_alegra AS VARCHAR), 'YYYYMMDD')) AS DATE) AS sign_up_year
+--,CAST(DATE_TRUNC('month', TO_DATE(CAST(id_date_registration_alegra AS VARCHAR), 'YYYYMMDD')) AS DATE) AS sign_up_month
 ,TO_DATE(CAST(id_date_registration_alegra AS VARCHAR), 'YYYYMMDD') AS sign_up_date
 ,segment_type_def AS id_company_segment --Segmento Core / Lite
 FROM dwh_facts.fact_sign_ups 
