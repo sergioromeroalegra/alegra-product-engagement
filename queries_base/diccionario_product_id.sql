@@ -1,0 +1,10 @@
+SELECT 1 AS id_product, 'Alegra Contabilidad' AS name_product
+UNION ALL SELECT 2, 'Alegra Tienda'
+UNION ALL SELECT 3, 'Alegra Nómina'
+UNION ALL SELECT 4, 'Alegra POS'
+UNION ALL SELECT 5, 'Tu Nómina Electrónica'
+UNION ALL SELECT 6, 'Alegra Facturación'
+UNION ALL SELECT 7, 'HolaBill'
+UNION ALL SELECT 8, 'E-Providers API'
+UNION ALL SELECT 9, 'Alegra Calcula'
+UNION ALL SELECT 11, 'Alegra Contador'
