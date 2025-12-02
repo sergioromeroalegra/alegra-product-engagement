@@ -1,0 +1,2 @@
+SELECT *
+FROM dwh_facts.fact_customers_mrr
