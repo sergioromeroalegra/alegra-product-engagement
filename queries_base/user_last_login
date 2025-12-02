@@ -1,0 +1,10 @@
+SELECT
+idcompany AS id_company
+,MAX(CAST(datetime AS DATE)) AS last_login_date
+FROM db_monolitico.history
+WHERE resource = 'user'
+    AND operation = 'login'
+    AND datetime >= '{fecha_inicio} 00:00:00'
+    AND datetime < '{fecha_fin} 00:00:00'
+    --AND idcompany = 1942647
+GROUP BY idcompany
