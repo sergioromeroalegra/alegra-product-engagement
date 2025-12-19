@@ -1,7 +1,0 @@
-SELECT DISTINCT
-id_ente_alegra
-,id_company
-,tipo_relacion -- SIN COMPANIES, ENTE PROPIO Y COMPANY ASOCIADA
-FROM bi_accountant.fact_accounting_sales_v1
---WHERE tipo_relacion = 'SIN_COMPANIES'
-ORDER BY id_ente_alegra, id_company
