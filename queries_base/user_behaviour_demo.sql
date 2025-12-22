@@ -106,7 +106,7 @@ LEFT JOIN (
             AND event_time BETWEEN '2025-07-01 00:00:00' AND '2025-12-15 23:59:59'
     ) AS a
     WHERE event_name NOT IN ('ac-account-created','ac-account-information-filled','ac-onboarding-started','ac-onboarding-finished','ac-onb-accountantType-selected','ac-role-selected'
-    ,'ac-sector-selected','ac-onb-user-information-filled','eco-subscription-payment-received')
+    ,'ac-sector-selected','ac-onb-user-information-filled','eco-subscription-payment-received','ac-first-step-managed')
 ) AS d
 ON a.id_company = d.id_company
 AND a.sign_up_date <= d.event_date
