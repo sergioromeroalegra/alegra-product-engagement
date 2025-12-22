@@ -1,13 +1,14 @@
 SELECT DISTINCT
 a.country
-,a.id_company
+,a.id_company AS id_company_contador
 ,a.sign_up_date
 ,a.event_type
 ,a.id_product
 ,a.id_company_type
 ,a.id_company_exp_group
 ,b.id_company_profile
-,CASE WHEN c.id_ente_alegra IS NOT NULL THEN 'Si' ELSE 'No' END AS is_contador_by_migue
+,c.id_company AS id_company_pyme_asociada
+,d.is_paying_logo AS id_company_is_paying
 FROM (
     SELECT DISTINCT
     app_version AS country
@@ -99,5 +100,19 @@ LEFT JOIN (
       )
 ) AS c
 ON a.id_company = c.id_ente_alegra
+AND a.id_company <> c.id_company
 
-WHERE CASE WHEN c.id_ente_alegra IS NOT NULL THEN 'Si' ELSE 'No' END = 'No'
+LEFT JOIN (
+    SELECT DISTINCT
+    id_company
+    ,date AS logo_date
+    ,is_paying_logo
+    FROM dwh_facts.fact_customers_mrr
+    WHERE date >= '2025-07-21'
+        AND app_version = 'colombia'
+) AS d
+ON c.id_company = d.id_company
+
+--WHERE CASE WHEN c.id_ente_alegra IS NOT NULL THEN 'Si' ELSE 'No' END = 'No'
+
+ORDER BY a.id_company, c.id_company
