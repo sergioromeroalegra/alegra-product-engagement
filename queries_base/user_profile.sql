@@ -1,7 +1,6 @@
 SELECT
 idcompany AS id_company
 ,profile AS id_company_profile --perfil entrepreneur, accountant, independent, student
-,COALESCE(segment_type_sales,segment_type_onb) AS id_company_segment
 FROM dwh_dimensions.dim_subscribers
 WHERE appversion IN ('colombia','costaRica','republicaDominicana','mexico','argentina','peru')
     AND registration_date >= '{fecha_inicio} 00:00:00'
