@@ -7,7 +7,8 @@ a.country
 ,a.id_company_type
 ,a.id_company_exp_group
 ,b.id_company_profile
-,c.id_company AS id_company_pyme_asociada
+,c.id_company_invited
+,c.invitation_status
 ,d.is_paying_logo AS id_company_is_paying
 FROM (
     SELECT DISTINCT
@@ -40,67 +41,41 @@ JOIN (
         AND profile = 'accountant'
 ) AS b
 ON a.id_company = b.id_company
-/*
+
 LEFT JOIN (
     SELECT DISTINCT
-    id_ente_alegra
-    ,id_company
-    ,tipo_relacion -- SIN COMPANIES, ENTE PROPIO Y COMPANY ASOCIADA
-    FROM bi_accountant.fact_accounting_sales_v1
+    a.id_contador
+    --,b.id_company_invited
+    ,b.email_company_invited
+    ,b.invitation_status
+    --,c.id_company AS id_company_invited_one
+    ,CASE WHEN c.id_company IS NOT NULL AND b.id_company_invited <> c.id_company THEN c.id_company ELSE b.id_company_invited END AS id_company_invited
+    FROM (
+        SELECT DISTINCT
+        ente_hubspot_id
+        ,ente_alegra_id AS id_contador
+        FROM bi_accountant.sales_actions_accountants
+    ) AS a 
+
+    JOIN (
+        SELECT DISTINCT
+        company_id AS id_contador
+        ,company_id_invited AS id_company_invited
+        ,sent_to_email AS email_company_invited
+        ,status AS invitation_status
+        FROM db_accountant.app_invitations_accountant
+    ) AS b
+    ON a.id_contador = b.id_contador
+
+    LEFT JOIN (
+        SELECT DISTINCT
+        idcompany AS id_company
+        ,email AS email_company
+        FROM alegra.users
+    ) AS c
+    ON b.email_company_invited = c.email_company
 ) AS c
-ON a.id_company = c.id_ente_alegra
-*/
-LEFT JOIN (
-    -- A. PYMES VINCULADAS (CARTERA DE CLIENTES)
-    SELECT DISTINCT 
-        ae.hs_accounting_entity_id AS id_ente_hubspot, 
-        ae.alegra_company_id AS id_ente_alegra,
-        CAST(cr.hubspot_company_id AS BIGINT) AS id_company_hubspot, 
-        CAST(cr.company_id AS BIGINT) AS id_company, 
-        'COMPANY_ASOCIADA' AS tipo_relacion
-    FROM db_hubspot.accounting_entities ae
-    JOIN db_hubspot.associations_accounting_entities_to_companies aec 
-        ON ae.hs_accounting_entity_id = aec.hs_accounting_entity_id
-    JOIN db_hubspot.companies_relation_ids cr 
-        ON aec.hs_company_id = cr.hubspot_company_id
-    WHERE cr.company_id IS NOT NULL 
-      -- 🛡️ FILTRO CRÍTICO ANTI-BUCLE (Validación 3):
-      -- Excluye registros donde el ID del Hijo sea igual al ID del Padre.
-      -- Si es NULL, pasa (es un lead puro). Si tiene dato, valida.
-      AND (ae.alegra_company_id IS NULL OR CAST(cr.company_id AS BIGINT) != CAST(ae.alegra_company_id AS BIGINT))
-    
-    UNION
-    
-    -- B. ENTE PROPIO (EL CONTADOR COMO CLIENTE)
-    SELECT DISTINCT 
-        hs_accounting_entity_id AS id_ente_hubspot, 
-        alegra_company_id AS id_ente_alegra,
-        CAST(NULL AS BIGINT) AS id_company_hubspot, 
-        alegra_company_id AS id_company, 
-        'ENTE_PROPIO' AS tipo_relacion
-    FROM db_hubspot.accounting_entities 
-    WHERE alegra_company_id IS NOT NULL
-    
-    UNION
-    
-    -- C. ENTE SIN NADA (PROSPECTOS VACÍOS)
-    -- Se incluyen para tener visibilidad del Pipeline aunque no facturen.
-    SELECT DISTINCT 
-        ae.hs_accounting_entity_id AS id_ente_hubspot, 
-        ae.alegra_company_id AS id_ente_alegra,
-        CAST(NULL AS BIGINT) AS id_company_hubspot, 
-        CAST(NULL AS BIGINT) AS id_company, 
-        'SIN_COMPANIES' AS tipo_relacion
-    FROM db_hubspot.accounting_entities ae
-    WHERE ae.alegra_company_id IS NULL
-      AND NOT EXISTS (
-          SELECT 1 FROM db_hubspot.associations_accounting_entities_to_companies aec2
-          JOIN db_hubspot.companies_relation_ids cr2 ON aec2.hs_company_id = cr2.hubspot_company_id
-          WHERE aec2.hs_accounting_entity_id = ae.hs_accounting_entity_id AND cr2.company_id IS NOT NULL
-      )
-) AS c
-ON a.id_company = c.id_ente_alegra
-AND a.id_company <> c.id_company
+ON a.id_company = c.id_contador
 
 LEFT JOIN (
     SELECT DISTINCT
@@ -111,8 +86,8 @@ LEFT JOIN (
     WHERE date >= '2025-07-21'
         AND app_version = 'colombia'
 ) AS d
-ON c.id_company = d.id_company
+ON c.id_company_invited = d.id_company
 
---WHERE CASE WHEN c.id_ente_alegra IS NOT NULL THEN 'Si' ELSE 'No' END = 'No'
+--WHERE c.id_company_invited <> c.id_company_invited_one
 
-ORDER BY a.id_company, c.id_company
+ORDER BY a.id_company, c.id_company_invited
