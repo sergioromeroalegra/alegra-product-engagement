@@ -57,12 +57,12 @@ FROM (
     ON a.id_company = b.id_company
     AND a.id_product = b.id_product
 
-    JOIN (
+    LEFT JOIN (
         SELECT
         idcompany AS id_company
         ,profile
         FROM dwh_dimensions.dim_subscribers
-        WHERE profile = 'entrepreneur'
+        --WHERE profile = 'entrepreneur'
         GROUP BY 1, 2 
     ) AS c
     ON a.id_company = c.id_company
