@@ -1,4 +1,21 @@
 --- QAs SOT Producto ---
+-- Registros --
+SELECT
+COUNT(DISTINCT id_company)
+FROM (
+    SELECT
+    id_company
+    ,id_product
+    ,TO_DATE(signup_date_key::text, 'YYYYMMDD') AS sign_up_date
+    ,app_version AS country
+    FROM bi_growth.bi_funnel_master_table_by_product
+    WHERE id_product = 1
+        AND TO_DATE(signup_date_key::text, 'YYYYMMDD') >= '2025-12-01'
+        AND TO_DATE(signup_date_key::text, 'YYYYMMDD') <= '2025-12-31'
+        AND app_version = 'colombia'
+    GROUP BY 1,2,3,4
+)
+
 -- Canales --
 SELECT
 acquisition_channel_name
