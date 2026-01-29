@@ -1,13 +1,10 @@
 --- User Atributes ---
 -- Trear Atributes al momento del sign up del producto --
 
--- Revisión de duplicados --
-/*
 SELECT
 id_company
 ,COUNT(*)
 FROM (
-*/
     SELECT
     a.id_company
     ,a.country
@@ -21,16 +18,17 @@ FROM (
     ,e.company_phone
     ,e.company_employees
     ,f.company_onb_revenue_tiers
+    --,g.id_company
     FROM (
         SELECT
         app_version AS country
         ,product_name
         ,id_product
-        ,CASE WHEN event_type = 'LOGO' THEN 'New User Alegra' ELSE 'New Subscriptor Product' END AS sign_up_type -- LOGO, PRODUCT
+        ,CASE WHEN event_type = 'LOGO' THEN 'New User Alegra' ELSE 'New Subscriber Product' END AS sign_up_type -- LOGO, PRODUCT
         ,TO_DATE(id_date_registration_alegra::text, 'YYYYMMDD') AS sign_up_date
         ,id_company
         FROM dwh_facts.fact_sign_ups
-        WHERE TO_DATE(id_date_registration_alegra::text, 'YYYYMMDD') >= '2025-06-01'
+        WHERE TO_DATE(id_date_registration_alegra::text, 'YYYYMMDD') >= '2025-12-01' AND TO_DATE(id_date_registration_alegra::text, 'YYYYMMDD') <= '2025-12-31'
         AND app_version IN ('colombia')
         AND id_product = 1
         --AND id_company = 1967994
@@ -46,13 +44,12 @@ FROM (
 
     LEFT JOIN (
         SELECT
-        id_product
-        ,channel_name AS acquisition_channel_name
-        ,TO_DATE(date_id::text, 'YYYYMMDD') AS acquisition_channel_date
-        ,id_company
-        FROM bi_growth.fact_acquisition_channels_companies
-        --WHERE id_company = 2130266
-        GROUP BY 1, 2, 3, 4
+        id_company
+        ,id_product
+        ,initial_utm_channel AS acquisition_channel_name
+        FROM bi_growth.fact_attribution
+        WHERE app_version = 'colombia'
+        GROUP BY 1,2,3
     ) AS b
     ON a.id_company = b.id_company
     AND a.id_product = b.id_product
@@ -68,18 +65,12 @@ FROM (
     ON a.id_company = c.id_company
 
     LEFT JOIN (
-        SELECT
-        id_company
-        ,user_company_position
-        FROM (
-            SELECT 
-            idcompany AS id_company,
-            dateregistry,
-            JSON_EXTRACT_PATH_TEXT(metadata, 'position') AS user_company_position,
-            ROW_NUMBER() OVER (PARTITION BY idcompany ORDER BY dateregistry ASC) as user_rank
-            FROM alegra.users
-        )
-        WHERE user_rank = 1
+        SELECT 
+        idcompany AS id_company,
+        dateregistry,
+        JSON_EXTRACT_PATH_TEXT(metadata, 'position') AS user_company_position
+        FROM alegra.users
+        WHERE idlocal = 1
     ) AS d
     ON a.id_company = d.id_company
 
@@ -105,15 +96,24 @@ FROM (
     ) AS f
     ON a.id_company = f.id_company
 
+    LEFT JOIN (
+        SELECT
+        id_company
+        ,id_product
+        ,TO_DATE(signup_date_key::text, 'YYYYMMDD') AS sign_up_date
+        ,app_version AS country
+        FROM bi_growth.bi_funnel_master_table_by_product
+        WHERE id_product = 1
+            AND TO_DATE(signup_date_key::text, 'YYYYMMDD') >= '2025-12-01'
+            AND TO_DATE(signup_date_key::text, 'YYYYMMDD') <= '2025-12-31'
+            AND app_version = 'colombia'
+        GROUP BY 1,2,3,4
+    ) AS g
+    ON a.id_company = g.id_company
 
-
-    --WHERE a.id_company = 1967994
-
+    WHERE g.id_company IS NULL
     --ORDER BY a.sign_up_date
-/*
 ) AS a
 
 GROUP BY 1
-
-HAVING COUNT(*) > 1
-*/
+--HAVING COUNT(*) > 1
