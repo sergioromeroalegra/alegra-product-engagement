@@ -6,13 +6,19 @@
     ,a.sign_up_type
     ,a.sign_up_date
     ,a.segment_type_onb
-    ,a.segment_type_def
+    ,h.segment_type_sales
+    ,a.segment_type_billing
     ,CASE WHEN b.acquisition_channel_name IS NULL THEN 'calculando...' ELSE b.acquisition_channel_name END AS acquisition_channel_name
-    ,c.company_profile
-    ,c.company_phone
-    ,c.company_employees
-    ,d.user_company_position
-    ,e.company_onb_revenue_tiers
+    ,c.sign_up_device_type
+    ,COALESCE(d.sign_up_platform_type,'web') AS sign_up_platform_type
+    ,e.company_profile
+    ,e.company_phone
+    ,e.company_employees
+    ,f.user_company_position
+    ,g.company_onb_revenue_tiers
+    ,CASE WHEN i.id_company IS NOT NULL THEN 'Incontactable' 
+        WHEN e.company_phone IS NULL OR e.company_phone = '' THEN 'Incontactable'
+        ELSE 'Contactable' END AS contactabilidad
     FROM (
         SELECT
         a.country
@@ -21,7 +27,7 @@
         ,a.sign_up_type
         ,a.sign_up_date
         ,a.segment_type_onb
-        ,a.segment_type_def
+        ,a.segment_type_billing
         ,a.id_company
         ,b.id_company_invited
         FROM (
@@ -33,7 +39,7 @@
             ,sign_up_date
             ,id_company
             ,segment_type_onb
-            ,segment_type_def
+            ,segment_type_billing
             FROM (
                 SELECT
                 app_version AS country
@@ -43,7 +49,7 @@
                 ,TO_DATE(id_date_registration_alegra::text, 'YYYYMMDD') AS sign_up_date
                 ,id_company
                 ,segment_type_onb
-                ,segment_type_def
+                ,segment_type_billing
                 ,ROW_NUMBER() OVER (PARTITION BY id_company, id_product ORDER BY CASE WHEN event_type = 'LOGO' THEN 1 ELSE 2 END ASC, id_date_registration_alegra ASC) AS rank_sign_up
                 FROM dwh_facts.fact_sign_ups
                 WHERE TO_DATE(id_date_registration_alegra::text, 'YYYYMMDD') >= '2025-12-01' AND TO_DATE(id_date_registration_alegra::text, 'YYYYMMDD') <= '2025-12-31'
@@ -108,6 +114,37 @@
 
     LEFT JOIN (
         SELECT
+        id_company
+        ,sign_up_device_type
+        FROM (
+            SELECT
+            idcompany AS id_company
+            ,device_type AS sign_up_device_type
+            ,ROW_NUMBER() OVER (PARTITION BY idcompany ORDER BY datetime) AS rank_device_type
+            FROM db_monolitico.mv_company_register_agents
+        ) AS a
+        WHERE rank_device_type = 1
+    ) AS c
+    ON a.id_company = c.id_company
+
+    LEFT JOIN (
+        SELECT
+            idcompany AS id_company,
+            -- Simplificamos el CASE ya que el WHERE garantiza que solo entren estos dos casos
+            CASE WHEN origin = 'mobile-app' THEN 'app' ELSE 'web' END AS sign_up_platform_type,
+            datetime
+        FROM db_monolitico.history
+        WHERE resource = 'company' -- Filtro de primer nivel (más general)
+        AND (
+            (origin = 'mobile-app' AND operation = 'registerFromApi')
+            OR 
+            (origin = 'web' AND operation = 'register')
+        )
+    ) AS d
+    ON a.id_company = d.id_company
+
+    LEFT JOIN (
+        SELECT
         id AS id_company
         ,employeesnumber AS company_employees
         ,phone AS company_phone
@@ -115,8 +152,8 @@
         ,profile AS company_profile
         FROM alegra.companies
         --GROUP BY 1, 2, 3
-    ) AS c
-    ON a.id_company = c.id_company
+    ) AS e
+    ON a.id_company = e.id_company
     -- Cargo del usuario dentro de la compañía
     LEFT JOIN (
         SELECT 
@@ -125,8 +162,8 @@
         JSON_EXTRACT_PATH_TEXT(metadata, 'position') AS user_company_position
         FROM alegra.users
         WHERE idlocal = 1
-    ) AS d
-    ON a.id_company = d.id_company
+    ) AS f
+    ON a.id_company = f.id_company
 
     LEFT JOIN (
         SELECT
@@ -137,5 +174,26 @@
             ELSE 'Sin clasificacion'
             END AS company_onb_revenue_tiers
         FROM db_hubspot.mql_the_blip
-    ) AS e
-    ON a.id_company = e.id_company
+    ) AS g
+    ON a.id_company = g.id_company
+
+    LEFT JOIN (
+        SELECT
+        idcompany AS id_company
+        ,segment_type_sales
+        FROM dwh_dimensions.dim_subscribers
+    ) AS h
+    ON a.id_company = h.id_company
+
+    LEFT JOIN (
+        SELECT
+        id_company
+        FROM bi_sales.sales_actions
+        WHERE ((gestion = 'Onboarding terminado' AND NOT contactable)
+            OR (gestion = 'Lead descalificado' AND detalle_gestion LIKE '%No hay comunicación%'))
+            AND estado_actual
+            --AND id_company = 1539229
+    ) AS i
+    ON a.id_company = i.id_company
+    
+    WHERE a.sign_up_type = 'New User Alegra'
