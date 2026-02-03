@@ -1,3 +1,11 @@
+--- User Atributes ---
+-- Trear Atributes al momento del sign up del producto --
+
+/*
+SELECT
+id_company
+,COUNT(*)
+FROM (*/
     SELECT
     a.id_company
     ,a.country
@@ -197,3 +205,16 @@
     ON a.id_company = i.id_company
     
     WHERE a.sign_up_type = 'New User Alegra'
+    --ORDER BY a.sign_up_date
+
+    --LIMIT 10
+/*
+) AS a
+
+GROUP BY 1
+HAVING COUNT(*) > 1
+*/
+
+-- --segment_type_sales
+--Contactable: WHERE gestion='Leads contactables'
+--Contactado: WHERE gestion='Llamada' AND cantidad=1
