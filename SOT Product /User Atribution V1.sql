@@ -76,12 +76,20 @@ WITH fact_sign_ups AS (
 
 ,alegra_companies AS (
     SELECT id_company
-    ,company_employees
+    ,company_employees_adj
     ,company_phone
     FROM (
         SELECT
             id AS id_company
             ,employeesnumber AS company_employees
+            ,CASE 
+                WHEN employeesnumber IN ('1') THEN '1'
+                WHEN employeesnumber IN ('1-2', '2-6', '3-6') THEN '2-10'
+                WHEN employeesnumber IN ('7-15', '16-25', '16-30') THEN '11-30'
+                WHEN employeesnumber IN ('26-50', 'Más de 30') THEN '31-50'
+                WHEN employeesnumber = '50+' THEN '51+'
+                ELSE NULL
+                END AS company_employees_adj
             ,phone AS company_phone
             ,ROW_NUMBER() OVER (PARTITION BY id ORDER BY id) as rn
         FROM alegra.companies
@@ -232,11 +240,11 @@ WITH fact_sign_ups AS (
 --SQL: ´bi_sales.sql´
 
 
---/*
+/*
 SELECT
 id_company
 ,COUNT(*)
-FROM(--*/
+FROM(*/
 SELECT *
 FROM (
     SELECT
@@ -245,8 +253,8 @@ FROM (
     ,a.id_company
     ,a.country
     ,a.product_name
-    ,a.id_product
-    ,b.acquisition_channel_name
+    ,a.id_product AS sign_up_id_product
+    ,b.acquisition_channel_name AS sign_up_id_product_acquisition_channel_name
     ,ba.sign_up_device_category
     ,c.event_date_onb_started
     ,c.event_date_role_selected
@@ -255,30 +263,39 @@ FROM (
     ,e.user_company_position
     ,c.event_date_account_info_filled
     ,f.company_sector
-    ,g.company_employees
+    ,g.company_employees_adj
     ,g.company_phone
-    ,h.company_onb_revenue_tiers
-    ,c.event_date_onb_finished
+    ,CASE 
+        WHEN a.country = 'colombia' THEN 
+            CASE 
+                WHEN h.company_onb_revenue_tiers = 'Tier 1 Revenue' THEN '0-15M COP'
+                WHEN h.company_onb_revenue_tiers = 'Tier 2 Revenue' THEN '15M-50M COP'
+                WHEN h.company_onb_revenue_tiers = 'Tier 3 Revenue' THEN '50M+ COP'
+                ELSE h.company_onb_revenue_tiers
+            END
+        ELSE h.company_onb_revenue_tiers -- Lo que pasa si el país NO es Colombia
+    END AS company_onb_revenue_tiers_adj
+    ,c.event_date_onb_finished AS id_product_onb_finished_date
     ,ha.segment_type_onb
     ,i.id_plan
     ,i.plan_name
     ,i.internal_name
     ,i.demo_plan_start_date
-    ,i.demo_plan_end_date
+    ,i.demo_plan_end_date AS id_product_demo_plan_end_date
     ,CASE WHEN j.logo_conversion_date < i.demo_plan_end_date THEN j.logo_conversion_date ElSE i.demo_plan_end_date END AS demo_plan_end_date_adj
-    ,DATEDIFF('day',i.demo_plan_start_date,demo_plan_end_date_adj) AS demo_days
-    ,j.logo_conversion_date
+    ,DATEDIFF('day',i.demo_plan_start_date,demo_plan_end_date_adj) AS id_product_num_demo_days
+    ,j.logo_conversion_date AS id_product_purchase_conversion_date
     ,j.event_logo
     ,j.event_product
     ,k.fecha
     ,k.gestion
     ,k.detalle_gestion
-    ,k.contactable
+    ,k.contactable AS id_product_sales_contact_type
     ,COALESCE(k.contactabilidad_adj,'Incontactable') AS contactabilidad_adj
     ,ROW_NUMBER() OVER (PARTITION BY a.id_company, a.id_product ORDER BY fecha DESC) AS rn
     ,l.segment_type_sales
     ,COALESCE(l.segment_type_sales, ha.segment_type_onb) AS segment_type_first_12_months
-    ,m.first_pql_date
+    ,m.first_pql_date AS id_product_first_pql_date
     FROM fact_sign_ups AS a
 
     LEFT JOIN fact_acquisition_channel AS b
@@ -350,7 +367,9 @@ FROM (
     --WHERE a.id_company IN (2174798,2174815,2174836,2180833,2182491)
 )
 WHERE rn = 1
---/*
+    AND id_product_onb_finished_date IS NOT NULL
+    AND company_profile = 'entrepreneur'
+/*
 )
 GROUP BY 1
-HAVING COUNT(*) > 1--*/
+HAVING COUNT(*) > 1*/
