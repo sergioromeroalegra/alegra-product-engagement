@@ -285,7 +285,14 @@ WITH base AS (
                 END
             ELSE h.company_onb_revenue_tiers -- Lo que pasa si el país NO es Colombia
         END AS company_onb_revenue_tiers_adj
-        ,c.event_date_onb_finished AS id_product_onb_finished_date
+        ,CASE 
+            -- 1. Si el evento de frontend existe, úsalo (Escenario ideal)
+            WHEN c.event_date_onb_finished IS NOT NULL THEN c.event_date_onb_finished
+            -- 2. Si NO existe el evento, pero ya facturó (PQL), OBLIGATORIAMENTE terminó el ONB.
+            --    Usamos el inicio del plan (Backend) como la mejor fecha aproximada.
+            WHEN m.first_pql_date IS NOT NULL THEN i.demo_plan_start_date
+            ELSE NULL
+        END AS id_product_onb_finished_date
         ,ha.segment_type_onb
         ,i.id_plan
         ,i.plan_name
@@ -425,7 +432,8 @@ WITH base AS (
             'ac-transaction-out-created',
             'ac-bank-created',
             'eco-wizard-finished',
-            'ac-report-shared'
+            'ac-report-shared',
+            'ac-support-document-created'
         )
     )
 )
@@ -435,20 +443,22 @@ b.sign_up_date
 ,b.id_company
 ,b.country
 ,b.product_name
-,b.id_product
-,b.acquisition_channel_name
+,b.sign_up_id_product
+,b.sign_up_id_product_acquisition_channel_name
 ,b.sign_up_device_category
 ,b.company_profile
 ,b.company_sector
-,b.company_employees
-,b.company_onb_revenue_tiers
-,b.event_date_onb_finished
+,b.company_employees_adj
+,b.company_onb_revenue_tiers_adj
+,b.id_product_onb_finished_date
+,b.demo_plan_start_date
 ,b.demo_plan_end_date_adj
-,b.demo_days
-,b.logo_conversion_date
+,b.id_product_num_demo_days
+,b.id_product_purchase_conversion_date
 ,b.contactabilidad_adj
 ,b.segment_type_first_12_months
-,b.first_pql_date
+,b.id_product_first_pql_date
+,b.icp_profile
 ,d.event_name
 ,d.event_date
 ,d.event_time
@@ -456,10 +466,9 @@ FROM base AS b
 
 LEFT JOIN demo_features AS d
     ON b.id_company = d.id_company
-    AND d.event_date >= b.event_date_onb_finished
+    AND d.event_date >= b.demo_plan_start_date
     AND d.event_date <= b.demo_plan_end_date_adj
 
-WHERE b.event_date_onb_finished IS NOT NULL
-    AND b.id_company = 2119794
+--WHERE b.id_company = 2119794
 
 ORDER BY d.event_time
