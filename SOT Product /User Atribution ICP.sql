@@ -284,7 +284,14 @@ FROM (
             END
         ELSE h.company_onb_revenue_tiers -- Lo que pasa si el país NO es Colombia
     END AS company_onb_revenue_tiers_adj
-    ,c.event_date_onb_finished AS id_product_onb_finished_date
+    ,CASE 
+        -- 1. Si el evento de frontend existe, úsalo (Escenario ideal)
+        WHEN c.event_date_onb_finished IS NOT NULL THEN c.event_date_onb_finished
+        -- 2. Si NO existe el evento, pero ya facturó (PQL), OBLIGATORIAMENTE terminó el ONB.
+        --    Usamos el inicio del plan (Backend) como la mejor fecha aproximada.
+        WHEN m.first_pql_date IS NOT NULL THEN i.demo_plan_start_date
+        ELSE NULL
+    END AS id_product_onb_finished_date
     ,ha.segment_type_onb
     ,i.id_plan
     ,i.plan_name
@@ -398,7 +405,3 @@ WHERE rn = 1
     AND id_product_onb_finished_date IS NOT NULL
     AND company_profile = 'entrepreneur'
     AND icp_profile IN ('Organico + PC','Organico + Mobile','Paid + PC','Paid + Mobile')
-/*
-)
-GROUP BY 1
-HAVING COUNT(*) > 1*/
