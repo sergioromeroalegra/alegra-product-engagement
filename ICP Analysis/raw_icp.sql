@@ -255,15 +255,6 @@ FROM (
     ,a.product_name
     ,a.id_product AS sign_up_id_product
     ,b.acquisition_channel_name AS sign_up_id_product_acquisition_channel_name
-    ,CASE 
-        WHEN b.acquisition_channel_name IN ('Paid Media (SEM + Social)', 'Influencers') 
-            THEN 'Paid'
-        WHEN b.acquisition_channel_name IN ('SEO / Organic Traffic', 'Direct Traffic', 'Referrals', 'Social Media (Organico)') 
-            THEN 'Orgánico'
-        WHEN b.acquisition_channel_name IN ('Lead Nurturing', 'Product Marketing', 'Others', 'Eventos', 'Alianzas') 
-            THEN 'Baja Escala'
-        ELSE 'Otros'
-    END AS sign_up_id_product_acquisition_channel_category
     ,ba.sign_up_device_category
     ,c.event_date_onb_started
     ,c.event_date_role_selected
@@ -312,25 +303,6 @@ FROM (
     ,l.segment_type_sales
     ,COALESCE(l.segment_type_sales, ha.segment_type_onb) AS segment_type_first_12_months
     ,m.first_pql_date AS id_product_first_pql_date
-    ,CASE 
-        -- Casos Orgánicos
-        WHEN b.acquisition_channel_name IN ('SEO / Organic Traffic', 'Direct Traffic', 'Referrals', 'Social Media (Organico)') THEN
-            CASE 
-                WHEN ba.sign_up_device_category = 'pc' THEN 'Organico + PC'
-                WHEN ba.sign_up_device_category = 'mobile' THEN 'Organico + Mobile'
-                ELSE 'Organico + Other Device' -- Para capturar 'other' si llega a pasar
-            END
-            
-        -- Casos Paid
-        WHEN b.acquisition_channel_name IN ('Paid Media (SEM + Social)', 'Influencers') THEN
-            CASE 
-                WHEN ba.sign_up_device_category = 'pc' THEN 'Paid + PC'
-                WHEN ba.sign_up_device_category = 'mobile' THEN 'Paid + Mobile'
-                ELSE 'Paid + Other Device'
-            END
-            
-        ELSE 'Non-ICP Profile' -- Baja escala u otros canales
-    END AS icp_profile
     FROM fact_sign_ups AS a
 
     LEFT JOIN fact_acquisition_channel AS b
@@ -402,6 +374,3 @@ FROM (
     --WHERE a.id_company IN (2174798,2174815,2174836,2180833,2182491)
 )
 WHERE rn = 1
-    AND id_product_onb_finished_date IS NOT NULL
-    AND company_profile = 'entrepreneur'
-    AND icp_profile IN ('Organico + PC','Organico + Mobile','Paid + PC','Paid + Mobile')
