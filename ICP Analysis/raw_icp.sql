@@ -291,5 +291,12 @@ LEFT JOIN logos AS i ON a.id_company = i.id_company
 LEFT JOIN demo_period_adj AS j ON a.id_company = j.id_company
 LEFT JOIN sales_actions_adj AS k ON a.id_company = k.id_company
 
+WHERE 
+    COALESCE(
+        g.id_product_onb_finish_date, -- Prioridad 1: Frontend
+        h.id_product_first_pql_date,  -- Prioridad 2: PQL
+        i.id_product_purchase_date    -- Prioridad 3: Compra
+    ) IS NOT NULL
+
 
 
