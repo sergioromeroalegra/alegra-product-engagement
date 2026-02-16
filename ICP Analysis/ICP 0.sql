@@ -122,13 +122,22 @@ WITH sign_ups AS (
 )
 
 ,onb_finished AS (
-    SELECT
+    SELECT 
         id_company
-        ,event_time AS id_product_onboarding_finish_time
+        ,device_category
+        ,CASE 
+            WHEN device_category = 'Desktop' THEN 'pc'
+            WHEN device_category = 'Mobile' THEN 'mobile'
+            ELSE 'other'
+        END AS id_product_onb_finish_device_category
+        ,event_time
         ,event_time::date AS id_product_onboarding_finish_date
+        ,ROW_NUMBER () OVER (PARTITION BY id_company ORDER BY event_time) AS rn
     FROM db_amplitude_events.amplitude_mql_events AS a
-    WHERE event_name = 'ac-onboarding-finished-backend'
-    QUALIFY ROW_NUMBER() OVER (PARTITION BY id_company ORDER BY event_time) = 1
+    WHERE 
+        event_name = 'ac-onboarding-finished-backend'
+        AND event_timestamp >= '2025-09-01'
+    QUALIFY ROW_NUMBER () OVER (PARTITION BY id_company ORDER BY event_time) = 1
 )
 
 ,pqls_raw AS ( -- Renombramos a _raw porque aun no está validado
@@ -267,12 +276,12 @@ SELECT
     ,f.user_company_position
     ,a.segment_type_onb
     ,a.segment_type_sales
-    ,g.id_product_onboarding_finish_date
     ,COALESCE(
         g.id_product_onboarding_finish_date, -- Prioridad 1: Frontend (Backend event)
         h.id_product_first_pql_date,  -- Prioridad 2: PQL (AHORA VALIDADO)
         i.id_product_purchase_date    -- Prioridad 3: Compra
     ) AS id_product_onb_finish_date_adj
+    ,g.id_product_onb_finish_device_category
     ,h.id_product_first_pql_date
     ,i.id_product_purchase_date
     ,j.id_product_demo_start_date
@@ -304,5 +313,7 @@ WHERE
 /*
 SELECT
 id_company
+,count(*)
 FROM base
-WHERE id_product_demo_start_date IS NULL*/
+group by 1
+having count(*) > 1*/
