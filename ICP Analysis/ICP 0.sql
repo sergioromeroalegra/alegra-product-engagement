@@ -10,7 +10,7 @@ WITH sign_ups AS (
         id_product = 1
         AND TO_DATE(id_date_registration_alegra::text, 'YYYYMMDD') >= '2025-09-01'
         AND app_version = 'colombia'
-        AND event_type = 'LOGO' --usuarios nuevos de Alegra
+        AND event_type = 'LOGO'
 )
 
 ,dim_subscribers AS (
@@ -34,9 +34,7 @@ WITH sign_ups AS (
         ,b.segment_type_sales
         ,b.company_sector
     FROM sign_ups AS a
-
     JOIN dim_subscribers AS b ON a.id_company = b.id_company
-
     GROUP BY 1,2,3,4,5,6,7
 )
 
@@ -117,7 +115,7 @@ WITH sign_ups AS (
         SELECT 
             idcompany AS id_company,
             JSON_EXTRACT_PATH_TEXT(metadata, 'position') AS user_company_position,
-            ROW_NUMBER() OVER (PARTITION BY idcompany ORDER BY id) as rn -- Safety net
+            ROW_NUMBER() OVER (PARTITION BY idcompany ORDER BY id) as rn
         FROM alegra.users
         WHERE idlocal = 1
     ) WHERE rn = 1
@@ -128,14 +126,12 @@ WITH sign_ups AS (
         id_company
         ,event_time AS id_product_onboarding_finish_time
         ,event_time::date AS id_product_onboarding_finish_date
-        ,ROW_NUMBER() OVER (PARTITION BY id_company ORDER BY event_time) AS rn
     FROM db_amplitude_events.amplitude_mql_events AS a
     WHERE event_name = 'ac-onboarding-finished-backend'
-        --AND id_company IN (1679953,1680580,1681907,645714,1682718)
     QUALIFY ROW_NUMBER() OVER (PARTITION BY id_company ORDER BY event_time) = 1
 )
 
-,pqls AS (
+,pqls_raw AS ( -- Renombramos a _raw porque aun no está validado
     SELECT 
         id_company, 
         MIN(event_time)::date AS id_product_first_pql_date
@@ -174,7 +170,6 @@ WITH sign_ups AS (
             ,b.plan_end_date AS id_product_demo_end_date
             ,ROW_NUMBER() OVER (PARTITION BY b.id_company ORDER BY b.plan_start_date) AS rn
         FROM dim_plan AS a
-
         JOIN subscription b ON a.id_plan = b.id_plan
     )
     WHERE rn = 1
@@ -187,7 +182,6 @@ WITH sign_ups AS (
     FROM dwh_facts.fact_customers_mrr
     WHERE id_product = 1 
         AND event_product = 'NEW'
-        --AND id_company = 2040761
 )
 
 ,demo_period_adj AS (
@@ -197,11 +191,24 @@ WITH sign_ups AS (
         ,DATEADD('day',15,b.id_product_demo_start_date)::date AS manual_end_demo
         ,b.id_product_demo_end_date
         ,c.id_product_purchase_date
+        -- Definimos el fin del periodo de evaluación (Fin Demo o Compra, lo que ocurra primero o 2099 si no compró)
         ,LEAST(COALESCE(c.id_product_purchase_date, '2099-12-31'), COALESCE(b.id_product_demo_end_date,DATEADD('day',15,b.id_product_demo_start_date)::date)) AS id_product_demo_end_date_adj
     FROM entrepreneurs AS a
-
     LEFT JOIN demo_period AS b ON a.id_company = b.id_company
     LEFT JOIN logos AS c ON a.id_company = c.id_company
+)
+
+-- [NUEVO CTE] VALIDACIÓN DE PQLs
+-- Aquí ocurre la magia: Solo dejamos pasar los PQLs que están DENTRO de la ventana de demo ajustada
+,pqls_validated AS (
+    SELECT 
+        p.id_company
+        ,p.id_product_first_pql_date
+    FROM pqls_raw AS p
+    INNER JOIN demo_period_adj AS d 
+        ON p.id_company = d.id_company
+    WHERE p.id_product_first_pql_date >= d.id_product_demo_start_date
+      AND p.id_product_first_pql_date <= d.id_product_demo_end_date_adj
 )
 
 ,sales_actions AS (
@@ -211,17 +218,9 @@ WITH sign_ups AS (
         ,gestion
         ,detalle_gestion
         ,contactable
-        -- Aplicamos tu diccionario manual aquí:
         ,CASE 
-            -- 1. INCONTACTABLE
-            WHEN detalle_gestion ~* 'cuelga|incorrecto|sin datos|errado|no.*comunicaci.n|incontactable'
-                    THEN 'Incontactable'
-            
-            -- 2. NO PERFIL / JUNK
-            WHEN detalle_gestion ~* 'duplicada|estudiante|competencia|lista negra|prueba' 
-                    THEN 'No Perfil (Junk)'
-            
-            -- 3. CONTACTADO
+            WHEN detalle_gestion ~* 'cuelga|incorrecto|sin datos|errado|no.*comunicaci.n|incontactable' THEN 'Incontactable'
+            WHEN detalle_gestion ~* 'duplicada|estudiante|competencia|lista negra|prueba' THEN 'No Perfil (Junk)'
             ELSE 'Contactable'
         END AS contactabilidad_adj
     FROM bi_sales.sales_actions
@@ -245,66 +244,65 @@ WITH sign_ups AS (
             END AS contactabilidad_adj
             ,ROW_NUMBER() OVER (PARTITION BY a.id_company ORDER BY b.fecha DESC) AS rn
         FROM demo_period_adj AS a
-
         INNER JOIN sales_actions b 
             ON a.id_company = b.id_company
             AND b.fecha >= a.id_product_demo_start_date
             AND b.fecha <= a.id_product_demo_end_date_adj
     )
-    -- IMPORTANTE: Aquí nos quedamos solo con la ÚLTIMA gestión dentro de la ventana
     WHERE rn = 1
 )
 
 --,base AS (
-    SELECT
-        a.country
-        ,a.id_company
-        ,a.id_product
-        ,a.id_product_sign_up_date
-        ,b.id_product_acquisition_channel_name
-        ,e.sign_up_device_category
-        ,c.company_employees_adj
-        ,c.company_phone
-        ,a.company_sector
-        ,d.company_onb_revenue_tiers
-        ,f.user_company_position
-        ,a.segment_type_onb
-        ,a.segment_type_sales
-        ,g.id_product_onboarding_finish_date
-        ,COALESCE(
-            g.id_product_onboarding_finish_date, -- Prioridad 1: Frontend
-            h.id_product_first_pql_date,  -- Prioridad 2: PQL
-            i.id_product_purchase_date    -- Prioridad 3: Compra
-        ) AS id_product_onb_finish_date_adj
-        ,h.id_product_first_pql_date
-        ,i.id_product_purchase_date
-        ,j.id_product_demo_start_date
-        ,j.id_product_demo_end_date_adj
-        ,k.contact_date
-        ,k.contactabilidad_adj
-    FROM entrepreneurs AS a
-    LEFT JOIN acquisition_channel AS b ON a.id_company = b.id_company
-    LEFT JOIN onboarding_atributes_1 AS c ON a.id_company = c.id_company
-    LEFT JOIN revenue_tiers AS d ON a.id_company = d.id_company 
-    LEFT JOIN sign_up_device AS e ON a.id_company = e.id_company
-    LEFT JOIN user_position AS f ON a.id_company = f.id_company
-    LEFT JOIN onb_finished AS g ON a.id_company = g.id_company
-    LEFT JOIN pqls AS h ON a.id_company = h.id_company
-    LEFT JOIN logos AS i ON a.id_company = i.id_company
-    LEFT JOIN demo_period_adj AS j ON a.id_company = j.id_company
-    LEFT JOIN sales_actions_adj AS k ON a.id_company = k.id_company
+SELECT
+    a.country
+    ,a.id_company
+    ,a.id_product
+    ,a.id_product_sign_up_date
+    ,b.id_product_acquisition_channel_name
+    ,e.sign_up_device_category
+    ,c.company_employees_adj
+    ,c.company_phone
+    ,a.company_sector
+    ,d.company_onb_revenue_tiers
+    ,f.user_company_position
+    ,a.segment_type_onb
+    ,a.segment_type_sales
+    ,g.id_product_onboarding_finish_date
+    ,COALESCE(
+        g.id_product_onboarding_finish_date, -- Prioridad 1: Frontend (Backend event)
+        h.id_product_first_pql_date,  -- Prioridad 2: PQL (AHORA VALIDADO)
+        i.id_product_purchase_date    -- Prioridad 3: Compra
+    ) AS id_product_onb_finish_date_adj
+    ,h.id_product_first_pql_date
+    ,i.id_product_purchase_date
+    ,j.id_product_demo_start_date
+    ,j.id_product_demo_end_date_adj
+    ,k.contact_date
+    ,COALESCE(k.contactabilidad_adj,'Incontactable') AS contactabilidad_adj
+FROM entrepreneurs AS a
+LEFT JOIN acquisition_channel AS b ON a.id_company = b.id_company
+LEFT JOIN onboarding_atributes_1 AS c ON a.id_company = c.id_company
+LEFT JOIN revenue_tiers AS d ON a.id_company = d.id_company 
+LEFT JOIN sign_up_device AS e ON a.id_company = e.id_company
+LEFT JOIN user_position AS f ON a.id_company = f.id_company
+LEFT JOIN onb_finished AS g ON a.id_company = g.id_company
+-- AQUÍ ESTÁ EL CAMBIO CLAVE: Unimos con la tabla validada, no con la cruda
+LEFT JOIN pqls_validated AS h ON a.id_company = h.id_company
+LEFT JOIN logos AS i ON a.id_company = i.id_company
+LEFT JOIN demo_period_adj AS j ON a.id_company = j.id_company
+LEFT JOIN sales_actions_adj AS k ON a.id_company = k.id_company
 
-    --/*
-    WHERE 
-        COALESCE(
-            g.id_product_onboarding_finish_date, -- Prioridad 1: Frontend
-            h.id_product_first_pql_date,  -- Prioridad 2: PQL
-            i.id_product_purchase_date    -- Prioridad 3: Compra
-        ) IS NOT NULL--*/
+--/*
+WHERE 
+    COALESCE(
+        g.id_product_onboarding_finish_date, 
+        h.id_product_first_pql_date,  
+        i.id_product_purchase_date    
+    ) IS NOT NULL--*/
 --)
 
 /*
 SELECT
-    COUNT(CASE WHEN id_product_onboarding_finish_date IS NOT NULL THEN id_company END) AS mqls_2
-    ,COUNT(CASE WHEN id_product_onb_finish_date_adj IS NOT NULL THEN id_company END) AS mqls_3
-FROM base*/
+id_company
+FROM base
+WHERE id_product_demo_start_date IS NULL*/
