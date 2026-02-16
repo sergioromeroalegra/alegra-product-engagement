@@ -62,29 +62,6 @@ WITH sign_ups AS (
     ) WHERE rn = 1
 )
 
-,onboarding_atributes_1 AS (
-    SELECT 
-        id_company
-        ,company_employees_adj
-        ,company_phone
-    FROM (
-        SELECT 
-            id AS id_company,
-            phone AS company_phone,
-            CASE 
-                WHEN employeesnumber IN ('1') THEN '1'
-                WHEN employeesnumber IN ('1-2', '2-6', '3-6') THEN '2-10'
-                WHEN employeesnumber IN ('7-15', '16-25', '16-30') THEN '11-30'
-                WHEN employeesnumber IN ('26-50', 'Más de 30') THEN '31-50'
-                WHEN employeesnumber = '50+' THEN '51+'
-                ELSE NULL 
-            END AS company_employees_adj,
-            ROW_NUMBER() OVER (PARTITION BY id ORDER BY id) as rn
-        FROM alegra.companies
-    ) 
-    WHERE rn = 1
-)
-
 ,sign_up_device AS (
     SELECT id_company, sign_up_device_category
     FROM (
